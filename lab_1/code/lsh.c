@@ -145,7 +145,18 @@ void runCMD(Command *cmd) {
 
   } else {
     // Parent process
-    wait(NULL); // Wait for the child process to finish ????
+    int background = cmd->background;
+    
+    if (background == 0) {
+      // Wait for the child process to finish
+      waitpid(pid, NULL, 0);
+    } else if (background == 1) {
+      // Do not wait for the child process to finish
+      printf("Process running in background with PID: %d\n", pid);
+    } else {
+      // Invalid background value
+      fprintf(stderr, "Invalid background value: %d\n", background);
+    }
   }
 
 }

@@ -53,12 +53,19 @@ int main(void)
       {
         // Print the parsed command
         print_cmd(&cmd);
+
+        // Create a new process for the parsed command and run it?
+        runCMD(&cmd);
+
       }
       else
       {
         printf("Parse ERROR\n");
       }
     }
+
+
+    
 
     // Free the input buffer
     free(line);
@@ -111,6 +118,40 @@ static void print_pgm(Pgm *p)
   }
 }
 
+// Start a new operating system process to run a command.
+void runCMD(Command *cmd) {
+  pid_t pid = fork();
+  
+  // 
+  
+  if (pid < 0) {
+    // Fork failed
+    perror("Fork failed");
+    exit(EXIT_FAILURE);
+
+  } else if (pid == 0) {
+    // Child process
+    
+    // use execvp to run the command
+    // command to execute:
+
+    // Look at the programlist, fetch the top one:
+    const char* commandToExecute = cmd->pgm->pgmlist[0];
+    
+    // Look at the programlist, fetch the rest of the arguments:
+    char *const *argument = cmd->pgm->pgmlist;
+
+    for (int i = 0; argument[i] != NULL; i++) {
+    printf("argument[%d] = %s\n", i, argument[i]);
+    }
+    execvp(commandToExecute, argument);
+
+  } else {
+    // Parent process
+    wait(NULL); // Wait for the child process to finish ????
+  }
+
+}
 
 /* Strip whitespace from the start and end of a string.
  *

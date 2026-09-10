@@ -7,10 +7,10 @@ typedef struct c
 typedef struct node
 {
   Pgm *pgm;
-  char *rstdin;
-  char *rstdout;
-  char *rstderr;
-  int background;
+  char *rstdin; // standard input
+  char *rstdout; // standard output if pipelining this will 
+  char *rstderr; // error for error messages
+  int background; // foreground or background?
 } Command;
 
 extern void init(void);

@@ -140,10 +140,7 @@ void runCMD(Command *cmd) {
     
     // Look at the programlist, fetch the rest of the arguments:
     char *const *argument = cmd->pgm->pgmlist;
-
-    for (int i = 0; argument[i] != NULL; i++) {
-    printf("argument[%d] = %s\n", i, argument[i]);
-    }
+    
     execvp(commandToExecute, argument);
 
   } else {

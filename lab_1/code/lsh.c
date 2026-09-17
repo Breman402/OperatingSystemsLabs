@@ -44,6 +44,8 @@ int main(void)
     char *line;
     line = readline("> ");
 
+    waitpid(-1, NULL, WNOHANG);
+
     // This fixes the ctrl + D func.
     if (line == NULL) {
     printf("\n");
@@ -164,8 +166,6 @@ void run_simple(Command *cmd) {
 
     } else if (background == 1) {
       // Do not wait for the child process to finish
-      waitpid(pid, NULL, WNOHANG); // Non-blocking wait to reap the child process if it has already finished
-      
       printf("Process running in background with PID: %d\n", pid);
     } else {
       // Invalid background value

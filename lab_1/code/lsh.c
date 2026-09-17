@@ -174,65 +174,89 @@ void run_simple(Command *cmd) {
   }
 }
 
+// Helper function: recursively executes the pipeline.
+void run_pipeline(Pgm *p) {
+    if (p == NULL) return;
 
-void run_piped(Command *cmd) {
-  int background = cmd->background;
-  Pgm *last  = cmd->pgm;       // last command in the pipeline
-  Pgm *first = cmd->pgm->next; // first command in the pipeline
-
-  int fd[2]; //communication channels
-  if (pipe(fd) == -1) { perror("pipe"); return; }
-
-  //child 1 (writes in pipe)
-  pid_t pid1 = fork();
-  
-  if (pid1 < 0) {
-    fprintf(stderr, "Fork failed");
-  }
-  else if (pid1 == 0) {
-    if (background == 0) {
-      signal(SIGINT, SIG_DFL);
+    // Base case: This is the FIRST command typed by the user
+    // (but the LAST one in the reverse-linked list).
+    if (p->next == NULL) {
+        execvp(p->pgmlist[0], p->pgmlist);
+        perror("execvp");
+        exit(1);
     }
-    dup2(fd[1], 1);
-    close(fd[0]); close(fd[1]);
-    execvp(first->pgmlist[0], first->pgmlist);
-    exit(1);
-  
-  }
 
-  //child 2 (reading from pipe)
-  pid_t pid2 = fork();
-  if (pid2 < 0) {
-    fprintf(stderr, "Fork failed");
-  }
-  else if (pid2 == 0) {
-    if (background == 0) signal(SIGINT, SIG_DFL);
-    dup2(fd[0], 0);
-    close(fd[0]); close(fd[1]);
-    execvp(last->pgmlist[0], last->pgmlist);
-    exit(1);
-  }
+    // Recursive case: Set up the pipe
+    int fd[2];
+    if (pipe(fd) == -1) {
+        perror("pipe");
+        exit(1);
+    }
 
+    // Fork for the left side of the pipe (p->next: the previous commands)
+    pid_t pid_left = fork();
+    if (pid_left < 0) { perror("fork"); exit(1); }
 
-    // parent close the pipe
+    if (pid_left == 0) {
+        // The left side writes its output to the pipe
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        run_pipeline(p->next); // Recurse to handle earlier commands
+    }
+
+    // Fork for the right side of the pipe (p: the current command)
+    pid_t pid_right = fork();
+    if (pid_right < 0) { perror("fork"); exit(1); }
+
+    if (pid_right == 0) {
+        // The right side reads its input from the pipe
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        execvp(p->pgmlist[0], p->pgmlist);
+        perror("execvp");
+        exit(1);
+    }
+
+    // Parent wrapper: Close pipes and wait for both sides to finish.
+    // This prevents zombies and ensures the shell waits for the ENTIRE pipeline.
     close(fd[0]);
     close(fd[1]);
+    waitpid(pid_left, NULL, 0);
+    waitpid(pid_right, NULL, 0);
 
+    // Exit this specific recursive step so it propagates up cleanly
+    exit(0);
+}
+
+void run_piped(Command *cmd) {
+    // Outer fork: Isolates the entire pipeline execution from the main shell process
+    pid_t pid = fork();
     
-    
-    if (background == 0) {
-      // Wait for the child process to finish or a ctrl + c signal to be recived
-      waitpid(pid1, NULL, 0);
-      waitpid(pid2, NULL, 0);
-      
-    } else if (background == 1) {
-      // Do not wait for the child process to finish
-      printf("Process running in background with PID: %d\n", pid1);
-    } else {
-      // Invalid background value
-      fprintf(stderr, "Invalid background value: %d\n", background);
+    if (pid < 0) {
+        perror("fork");
+        return;
     }
-  
+    
+    if (pid == 0) {
+        // We are the outer child wrapper
+        // If this is a foreground process, restore default Ctrl-C behavior
+        if (cmd->background == 0) {
+            signal(SIGINT, SIG_DFL);
+        }
+        
+        run_pipeline(cmd->pgm);
+        exit(1); // Should only be reached if pgm is NULL
+    }
+
+    // Main shell process
+    if (cmd->background == 0) {
+        // Wait for the outer wrapper (which in turn waits for the whole pipeline)
+        waitpid(pid, NULL, 0);
+    } else {
+        printf("Process running in background with PID: %d\n", pid);
+    }
 }
 
 void runCMD(Command *cmd_list) {

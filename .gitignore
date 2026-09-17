@@ -1,4 +1,4 @@
 *.json
 *.vscode
 build/
-tests/
+lab_1/tests/

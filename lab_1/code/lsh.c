@@ -46,9 +46,12 @@ int main(void)
     char *line;
     line = readline("> ");
 
+    // Reap any zombie processes that may have been created by background processes
+    // Has to be a while loop because there may be multiple zombie processes to reap.
     while (waitpid(-1, NULL, WNOHANG) > 0);
 
     // This fixes the ctrl + D func.
+    // If the user presses Ctrl+D, readline returns NULL which should be treated a signal to exit the shell.
     if (line == NULL) {
     printf("\n");
     break;
@@ -196,7 +199,7 @@ void run_simple(Command *cmd) {
     // Parent process
     
     if (background == 0) { // if not a background process
-      // Wait for the child process to finish or a ctrl + c signal to be recived
+      // Wait for the child process to finish or a ctrl + c signal to be recived     
       waitpid(pid, NULL, 0);
 
     } else if (background == 1) {
@@ -297,6 +300,7 @@ void run_piped(Command *cmd) {
 }
 
 void runCMD(Command *cmd_list) {
+// If the command list pgm next is NULL, it means there is only one command to run, so we call run_simple.
   if (cmd_list->pgm->next == NULL){
     run_simple(cmd_list);
   }else{

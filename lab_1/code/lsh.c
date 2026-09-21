@@ -203,7 +203,7 @@ static void apply_redirection(const char *rstdin, const char *rstdout)
 void run_simple(Command *cmd) {
   int background = cmd->background; // 1 if background, 0 if foreground
   
-  // Treat the SIGCHLD signal the default way (terminate yourself when done) if this is a foreground process
+  // Treat SIGCHLD normally in the child process.
   if (background == 0) {
     signal(SIGCHLD, SIG_DFL);
   }
@@ -330,7 +330,7 @@ void run_piped(Command *cmd) {
     // Outer fork: Isolates the entire pipeline execution from the main shell process
     int background = cmd->background; // 1 if background, 0 if foreground
 
-    // Treat the SIGCHLD signal the default way (terminate yourself when done) if this is a foreground process
+    // Treat SIGCHLD normally in the child process.
     if (background == 0) {
         signal(SIGCHLD, SIG_DFL);
     }    

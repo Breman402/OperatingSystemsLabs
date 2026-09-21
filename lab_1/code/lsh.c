@@ -67,19 +67,36 @@ int main(void)
     {
       add_history(line);
 
-      Command cmd;
-      if (parse(line, &cmd) == 1)
-      {
-        // Print the parsed command
-        print_cmd(&cmd);
-        
-        // Create a new process for the parsed command and run it?
-        runCMD(&cmd);
+      // Check if cd      
+      int le = strlen(line);
+      char arr[le + 1];
+      strcpy(arr, line); // Convert String literal to char array
+      char* arg = strtok(arr, " ");
+      char* first_arg = arg; // First argument
+      arg = strtok(NULL, " ");
+      char* second_arg = arg; // Second argument
+
+      // If first argument in input is cd, send second argument to cd function
+      if (strcmp(first_arg, "cd") == 0) {
+        cd(second_arg);
       }
-      else
-      {
-        printf("Parse ERROR\n");
+      // Else run like other commands
+      else {
+        Command cmd;
+        if (parse(line, &cmd) == 1)
+        {
+          // Print the parsed command
+          print_cmd(&cmd);
+          
+          // Create a new process for the parsed command and run it?
+          runCMD(&cmd);
+        }
+        else
+        {
+          printf("Parse ERROR\n");
+        }
       }
+      
     }
 
 
@@ -90,6 +107,18 @@ int main(void)
   }
 
   return 0;
+}
+
+// Run cd command with path arg
+void cd(char *arg)
+{
+  if (arg == NULL) {
+    fprintf(stderr, "Missing argument for cd"); // Path not given in input
+    return;
+  }
+  if (chdir(arg) == -1) { // Change directory to the given path
+    perror("cd");
+  }
 }
 
 /*

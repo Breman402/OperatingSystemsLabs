@@ -219,6 +219,9 @@ void run_simple(Command *cmd) {
       // use the custom SIGCHLD handler to reap any other child processes that may have finished whilst waiting for this one
       signal(SIGCHLD, sigchld_handler);
 
+      // Reap any children that finished while the custom handler was disabled.
+      while (waitpid(-1, NULL, WNOHANG) > 0);
+      
     } else if (background == 1) {
       // Do not wait for the child process to finish
       printf("Process running in background with PID: %d\n", pid);
@@ -326,6 +329,9 @@ void run_piped(Command *cmd) {
         while (finished_pid != pid) {
             finished_pid = waitpid(-1, NULL, 0);
         }
+
+        // Reap any children that finished while the custom handler was disabled.
+        while (waitpid(-1, NULL, WNOHANG) > 0);
 
         // Restore the custom SIGCHLD handler
         signal(SIGCHLD, sigchld_handler);

@@ -37,6 +37,7 @@ void runCMD(Command *cmd);
 static void print_pgm(Pgm *p);
 void stripwhite(char *);
 static void apply_redirection(const char *rstdin, const char *rstdout);
+void cd(char *arg);
 
 // This funciton is created to be ran every time a signal for a process being done is recived
 void sigchld_handler();
@@ -237,13 +238,9 @@ void run_simple(Command *cmd) {
     // Parent process
     
     if (background == 0) { // if foregound process
-      // Wait for the child process to finish or a ctrl + c signal to be recived     
-      pid_t finished_pid = 0;
-
-      // We use this to also reap any other child processes that may have finished whilst waiting for this one
-      while (finished_pid != pid) { // Wait for the specific child process to finish
-          finished_pid = waitpid(-1, NULL, 0); 
-      }
+      
+      // Wait for the child process to finish
+      waitpid(pid, NULL, 0);
 
       // use the custom SIGCHLD handler to reap any other child processes that may have finished whilst waiting for this one
       signal(SIGCHLD, sigchld_handler);
@@ -352,12 +349,8 @@ void run_piped(Command *cmd) {
 
     // Main shell process
     if (background == 0) {
-        // Wait for the outer wrapper (which in turn waits for the whole pipeline)
-        pid_t finished_pid = 0;
-
-        while (finished_pid != pid) {
-            finished_pid = waitpid(-1, NULL, 0);
-        }
+        // Wait for the child process to finish
+        waitpid(pid, NULL, 0);
 
         // Restore the custom SIGCHLD handler
         signal(SIGCHLD, sigchld_handler);

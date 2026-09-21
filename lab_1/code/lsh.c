@@ -211,7 +211,15 @@ void run_simple(Command *cmd) {
   pid_t pid = fork();
 
   if (pid < 0) {
-    fprintf(stderr, "Fork failed");
+    perror("fork");
+
+    if (background == 0) {
+      // Restore the custom SIGCHLD handler if this is a foreground process
+      signal(SIGCHLD, sigchld_handler);
+    }
+
+    return;
+  
   } else if (pid == 0) {
     // Child process
 
@@ -330,8 +338,14 @@ void run_piped(Command *cmd) {
     pid_t pid = fork();
     
     if (pid < 0) {
-        perror("fork");
-        return;
+      perror("fork");
+
+      if (background == 0) {
+        // Restore the custom SIGCHLD handler if this is a foreground process
+        signal(SIGCHLD, sigchld_handler);
+      }
+
+      return;
     }
     
     if (pid == 0) {

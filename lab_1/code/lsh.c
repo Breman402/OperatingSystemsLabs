@@ -330,11 +330,11 @@ void run_piped(Command *cmd) {
             finished_pid = waitpid(-1, NULL, 0);
         }
 
-        // Reap any children that finished while the custom handler was disabled.
-        while (waitpid(-1, NULL, WNOHANG) > 0);
-
         // Restore the custom SIGCHLD handler
         signal(SIGCHLD, sigchld_handler);
+
+        // Reap any children that finished while the custom handler was disabled.
+        while (waitpid(-1, NULL, WNOHANG) > 0);
 
     } else {
         printf("Process running in background with PID: %d\n", pid);

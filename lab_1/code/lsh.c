@@ -38,17 +38,17 @@ static void print_pgm(Pgm *p);
 void stripwhite(char *);
 static void apply_redirection(const char *rstdin, const char *rstdout);
 
+// This funciton is created to be ran every time a signal for a process being done is recived
+void sigchld_handler();
+
 int main(void)
 {
-  signal(SIGINT, SIG_IGN); // Ignore signal SIGINT (Ctrl+C) in the parent process
+  signal(SIGINT, SIG_IGN);          // Ignore signal SIGINT (Ctrl+C) in the parent process
+  signal(SIGCHLD, sigchld_handler); // Set up so that the funciton gets called
   for (;;)
   {
     char *line;
     line = readline("> ");
-
-    // Reap any zombie processes that may have been created by background processes
-    // Has to be a while loop because there may be multiple zombie processes to reap.
-    while (waitpid(-1, NULL, WNOHANG) > 0);
 
     // This fixes the ctrl + D func.
     // If the user presses Ctrl+D, readline returns NULL which should be treated a signal to exit the shell.
@@ -169,13 +169,22 @@ static void apply_redirection(const char *rstdin, const char *rstdout)
 
 // Start a new operating system process to run a command.
 void run_simple(Command *cmd) {
-  int background = cmd->background;
+  int background = cmd->background; // 1 if background, 0 if foreground
+  
+  // Treat the SIGCHLD signal the default way (terminate yourself when done) if this is a foreground process
+  if (background == 0) {
+    signal(SIGCHLD, SIG_DFL);
+  }
+  
   pid_t pid = fork();
 
   if (pid < 0) {
     fprintf(stderr, "Fork failed");
   } else if (pid == 0) {
     // Child process
+
+    // Child processes should allways treat SIGCHLD the default way (terminate yourself when done)
+    signal(SIGCHLD, SIG_DFL);
 
     if (background == 0) { // if not a background process, die from ctrl + c
       // This setting only applies to this child process! 
@@ -198,9 +207,17 @@ void run_simple(Command *cmd) {
   } else {
     // Parent process
     
-    if (background == 0) { // if not a background process
+    if (background == 0) { // if foregound process
       // Wait for the child process to finish or a ctrl + c signal to be recived     
-      waitpid(pid, NULL, 0);
+      pid_t finished_pid = 0;
+
+      // We use this to also reap any other child processes that may have finished whilst waiting for this one
+      while (finished_pid != pid) { // Wait for the specific child process to finish
+          finished_pid = waitpid(-1, NULL, 0); 
+      }
+
+      // use the custom SIGCHLD handler to reap any other child processes that may have finished whilst waiting for this one
+      signal(SIGCHLD, sigchld_handler);
 
     } else if (background == 1) {
       // Do not wait for the child process to finish
@@ -272,6 +289,13 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
 
 void run_piped(Command *cmd) {
     // Outer fork: Isolates the entire pipeline execution from the main shell process
+    int background = cmd->background; // 1 if background, 0 if foreground
+
+    // Treat the SIGCHLD signal the default way (terminate yourself when done) if this is a foreground process
+    if (background == 0) {
+        signal(SIGCHLD, SIG_DFL);
+    }    
+    
     pid_t pid = fork();
     
     if (pid < 0) {
@@ -281,8 +305,12 @@ void run_piped(Command *cmd) {
     
     if (pid == 0) {
         // We are the outer child wrapper
+    
+        // Restore default signal handling for SIGCHLD in the child process
+        signal(SIGCHLD, SIG_DFL);
+    
         // If this is a foreground process, restore default Ctrl-C behavior
-        if (cmd->background == 0) {
+        if (background == 0) {
             signal(SIGINT, SIG_DFL);
         }
         
@@ -291,9 +319,17 @@ void run_piped(Command *cmd) {
     }
 
     // Main shell process
-    if (cmd->background == 0) {
+    if (background == 0) {
         // Wait for the outer wrapper (which in turn waits for the whole pipeline)
-        waitpid(pid, NULL, 0);
+        pid_t finished_pid = 0;
+
+        while (finished_pid != pid) {
+            finished_pid = waitpid(-1, NULL, 0);
+        }
+
+        // Restore the custom SIGCHLD handler
+        signal(SIGCHLD, sigchld_handler);
+
     } else {
         printf("Process running in background with PID: %d\n", pid);
     }
@@ -308,7 +344,11 @@ void runCMD(Command *cmd_list) {
   }
 }
 
-
+void sigchld_handler() {
+    // Reap any zombie processes that may have been created by background processes
+    // Has to be a while loop because there may be multiple zombie processes to reap.
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+}
 
 
 

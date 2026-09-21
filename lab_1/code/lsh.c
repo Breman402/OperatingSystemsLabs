@@ -116,7 +116,7 @@ int main(void)
 void cd(char *arg)
 {
   if (arg == NULL) {
-    fprintf(stderr, "Missing argument for cd"); // Path not given in input
+    fprintf(stderr, "Missing argument for cd \n"); // Path not given in input
     return;
   }
   if (chdir(arg) == -1) { // Change directory to the given path
@@ -176,11 +176,11 @@ static void apply_redirection(const char *rstdin, const char *rstdout)
     int fd = open(rstdin, O_RDONLY);
     if (fd < 0) {
       perror(rstdin);
-      exit(1);
+      _exit(1);
     }
     if (dup2(fd, STDIN_FILENO) < 0) {
       perror("dup2 stdin");
-      exit(1);
+      _exit(1);
     }
     close(fd);
   }
@@ -189,11 +189,11 @@ static void apply_redirection(const char *rstdin, const char *rstdout)
     int fd = open(rstdout, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
       perror(rstdout);
-      exit(1);
+      _exit(1);
     }
     if (dup2(fd, STDOUT_FILENO) < 0) {
       perror("dup2 stdout");
-      exit(1);
+      _exit(1);
     }
     close(fd);
   }
@@ -234,7 +234,7 @@ void run_simple(Command *cmd) {
     // Execute the command with the provided arguments
     execvp(commandToExecute, argument);
     perror(commandToExecute);
-    exit(1);
+    _exit(1);
     
   } else {
     // Parent process
@@ -270,19 +270,19 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
         apply_redirection(rstdin, rstdout);
         execvp(p->pgmlist[0], p->pgmlist);
         perror("execvp");
-        exit(1);
+        _exit(1);
     }
 
     // Recursive case: Set up the pipe
     int fd[2];
     if (pipe(fd) == -1) {
         perror("pipe");
-        exit(1);
+      _exit(1);
     }
 
     // Fork for the left side of the pipe (p->next: the previous commands)
     pid_t pid_left = fork();
-    if (pid_left < 0) { perror("fork"); exit(1); }
+    if (pid_left < 0) { perror("fork"); _exit(1); }
 
     if (pid_left == 0) {
         // The left side writes its output to the pipe
@@ -294,7 +294,7 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
 
     // Fork for the right side of the pipe (p: the current command)
     pid_t pid_right = fork();
-    if (pid_right < 0) { perror("fork"); exit(1); }
+    if (pid_right < 0) { perror("fork"); _exit(1); }
 
     if (pid_right == 0) {
         // The right side reads its input from the pipe
@@ -304,7 +304,7 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
         apply_redirection(NULL, rstdout);
         execvp(p->pgmlist[0], p->pgmlist);
         perror("execvp");
-        exit(1);
+        _exit(1);
     }
 
     // Parent wrapper: Close pipes and wait for both sides to finish.
@@ -315,7 +315,7 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
     waitpid(pid_right, NULL, 0);
 
     // Exit this specific recursive step so it propagates up cleanly
-    exit(0);
+    _exit(0);
 }
 
 void run_piped(Command *cmd) {
@@ -346,7 +346,7 @@ void run_piped(Command *cmd) {
         }
         
         run_pipeline(cmd->pgm, cmd->rstdin, cmd->rstdout);
-        exit(1); // Should only be reached if pgm is NULL
+        _exit(1); // Should only be reached if pgm is NULL
     }
 
     // Main shell process

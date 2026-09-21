@@ -56,12 +56,14 @@ int main(void)
     if (line == NULL) {
     printf("\n");
     break;
-  } else if (line && strcmp(line, "exit") == 0) { // Check if the input line is "exit"
-    break;
   }
 
     // Remove leading and trailing whitespace from the line
     stripwhite(line);
+
+    if (line && strcmp(line, "exit") == 0) { // Check if the input line is "exit"
+      break;
+    }
 
     // If the stripped line is not blank
     if (*line)

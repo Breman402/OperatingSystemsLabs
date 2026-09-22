@@ -54,9 +54,9 @@ int main(void)
     // This fixes the ctrl + D func.
     // If the user presses Ctrl+D, readline returns NULL which should be treated a signal to exit the shell.
     if (line == NULL) {
-    printf("\n");
-    break;
-  }
+      printf("\n");
+      break;
+    }
 
     // Remove leading and trailing whitespace from the line
     stripwhite(line);
@@ -69,42 +69,20 @@ int main(void)
     if (*line)
     {
       add_history(line);
-
-      // Check if cd      
-      int le = strlen(line);
-      char arr[le + 1];
-      strcpy(arr, line); // Convert String literal to char array
-      char* arg = strtok(arr, " ");
-      char* first_arg = arg; // First argument
-      arg = strtok(NULL, " ");
-      char* second_arg = arg; // Second argument
-
-      // If first argument in input is cd, send second argument to cd function
-      if (strcmp(first_arg, "cd") == 0) {
-        cd(second_arg);
+      Command cmd;
+      if (parse(line, &cmd) == 1)
+      {
+        // Print the parsed command
+        print_cmd(&cmd);
+        
+        // Create a new process for the parsed command and run it?
+        runCMD(&cmd);
       }
-      // Else run like other commands
-      else {
-        Command cmd;
-        if (parse(line, &cmd) == 1)
-        {
-          // Print the parsed command
-          print_cmd(&cmd);
-          
-          // Create a new process for the parsed command and run it?
-          runCMD(&cmd);
-        }
-        else
-        {
-          printf("Parse ERROR\n");
-        }
+      else
+      {
+        printf("Parse ERROR\n");
       }
-      
     }
-
-
-    
-
     // Free the input buffer
     free(line);
   }
@@ -276,6 +254,13 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
     // (but the LAST one in the reverse-linked list).
     if (p->next == NULL) {
         apply_redirection(rstdin, rstdout);
+
+        // Check if the command is "cd"
+        // if it is we make use of the cd function to change the directory and exit the child process
+        if (strcmp(p->pgmlist[0], "cd") == 0) {
+          cd(p->pgmlist[1]);
+          _exit(0);
+        }
         execvp(p->pgmlist[0], p->pgmlist);
         perror("execvp");
         _exit(1);
@@ -310,6 +295,14 @@ void run_pipeline(Pgm *p, const char *rstdin, const char *rstdout) {
         close(fd[0]);
         close(fd[1]);
         apply_redirection(NULL, rstdout);
+
+        // Check if the command is "cd"
+        // if it is we make use of the cd function to change the directory and exit the child process
+        if (strcmp(p->pgmlist[0], "cd") == 0) {
+          cd(p->pgmlist[1]);
+          _exit(0);
+        }
+        
         execvp(p->pgmlist[0], p->pgmlist);
         perror("execvp");
         _exit(1);
@@ -381,11 +374,14 @@ void run_piped(Command *cmd) {
 
 void runCMD(Command *cmd_list) {
 // If the command list pgm next is NULL, it means there is only one command to run, so we call run_simple.
-  if (cmd_list->pgm->next == NULL){
-    run_simple(cmd_list);
-  }else{
-    run_piped(cmd_list);
-  }
+  if (cmd_list->pgm->next == NULL && strcmp(cmd_list->pgm->pgmlist[0], "cd") == 0) {
+    cd(cmd_list->pgm->pgmlist[1]);
+    return;
+  }else if (cmd_list->pgm->next == NULL){
+      run_simple(cmd_list);
+    }else{
+      run_piped(cmd_list);
+    }
 }
 
 void sigchld_handler() {

@@ -204,10 +204,14 @@ void run_simple(Command *cmd) {
     // Child processes should allways treat SIGCHLD the default way (terminate yourself when done)
     signal(SIGCHLD, SIG_DFL);
 
-    if (background == 0) { // if not a background process, die from ctrl + c
-      // This setting only applies to this child process! 
-      signal(SIGINT, SIG_DFL);
+    // Move background jobs out of the terminal's foreground process group.
+    // This makes it so that background jobs don't receive SIGINT when the user presses Ctrl-C.
+    if (background && setpgid(0, 0) < 0) {
+      perror("setpgid");
+      _exit(1);
     }
+    // Every child should terminate when it receives SIGINT.
+    signal(SIGINT, SIG_DFL);
 
     apply_redirection(cmd->rstdin, cmd->rstdout);
 
@@ -347,10 +351,13 @@ void run_piped(Command *cmd) {
         // Restore default signal handling for SIGCHLD in the child process
         signal(SIGCHLD, SIG_DFL);
     
-        // If this is a foreground process, restore default Ctrl-C behavior
-        if (background == 0) {
-            signal(SIGINT, SIG_DFL);
+        // Pipeline children inherit this wrapper's process group.
+        if (background && setpgid(0, 0) < 0) {
+            perror("setpgid");
+            _exit(1);
         }
+        // Restore default Ctrl-C behavior for foreground and background jobs.
+        signal(SIGINT, SIG_DFL);
         
         run_pipeline(cmd->pgm, cmd->rstdin, cmd->rstdout);
         _exit(1); // Should only be reached if pgm is NULL

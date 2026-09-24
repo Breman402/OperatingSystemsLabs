@@ -39,7 +39,7 @@ void stripwhite(char *);
 static void apply_redirection(const char *rstdin, const char *rstdout);
 void cd(char *arg);
 
-// This funciton is created to be ran every time a signal for a process being done is recived
+// This funciton is created to run every time a signal for a process being done is received
 void sigchld_handler();
 
 int main(void)

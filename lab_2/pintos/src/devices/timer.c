@@ -20,6 +20,8 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+static struct list sleep_list; /* ADDED BY US: List of sleeping threads. */
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -35,6 +37,9 @@ static void real_time_delay (int64_t num, int32_t denom);
 void
 timer_init (void) 
 {
+
+  list_init(&sleep_list); /* ADDED BY US: Initialize the sleep list. A pintos list must be initialized before use. */
+
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -84,16 +89,40 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+static bool isWakeupTickLower(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  // This funciton is used to compare the wakeup_tick of two threads in the sleep_list. It returns true if the wakeup_tick of thread a is less than that of thread b
+  // indicating that thread a should be placed before thread b in the list.
+  // It has to take void *aux as a parameter to match the signature of list_less_func, but we don't use it in this comparison.
+  const struct thread *thread_a = list_entry(a, struct thread, elem);
+  const struct thread *thread_b = list_entry(b, struct thread, elem);
+  return thread_a->wakeup_tick < thread_b->wakeup_tick;
+}
+
+
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  enum intr_level old_level; // ADDED BY US: Store the previous interrupt level to restore it later.
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  if (ticks <= 0) {
+    return; // No need to sleep for non-positive ticks
+  }
+
+  ASSERT (intr_get_level() == INTR_ON);                                               // Ensure that interrupts are enabled before proceeding.
+
+  old_level = intr_disable();                                                         // Disable interrupts to prevent race conditions while modifying the sleep list.
+
+  thread_current()->wakeup_tick = timer_ticks() + ticks;                              // Set the wakeup tick for the current thread.
+
+  list_insert_ordered(&sleep_list, &thread_current()->elem, isWakeupTickLower, NULL); // Insert the current thread into the sleeping list ordered by wakeup_tick
+                                                                                      // This way, whatever thread is at the front of the list will be the one that needs to wake up first.
+
+  thread_block();                                                                     // Block the current thread until it is unblocked by the timer interrupt.
+
+  intr_set_level(old_level);                                                          // Restore the previous interrupt level.
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -170,7 +199,20 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  ticks++;
+  ticks++;                                                                                    // Advances the system timer by one tick
+
+  while (!list_empty(&sleep_list)) {                                                          // If there are any sleeping threads:
+    
+    struct thread *thread_to_wake = list_entry(list_front(&sleep_list), struct thread, elem); // Get the thread at the front of the sleep list, which is the thread with the earliest wakeup_tick.
+    
+    if (thread_to_wake->wakeup_tick > ticks) {
+      break;                                                                                  // The first thread in the list has a wakeup_tick greater than the current ticks, so we can stop checking.
+    }
+    
+    list_pop_front(&sleep_list);                                                              // Remove the thread from the sleep list.
+    thread_unblock(thread_to_wake);                                                           // Unblock the thread so it can run again.
+  }
+  
   thread_tick ();
 }
 
@@ -224,7 +266,7 @@ real_time_sleep (int64_t num, int32_t denom)
     {
       /* We're waiting for at least one full timer tick.  Use
          timer_sleep() because it will yield the CPU to other
-         processes. */                
+         processes. */
       timer_sleep (ticks); 
     }
   else 

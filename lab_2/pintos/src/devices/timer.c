@@ -93,9 +93,9 @@ static bool isWakeupTickLower(const struct list_elem *a, const struct list_elem 
   // This funciton is used to compare the wakeup_tick of two threads in the sleep_list. It returns true if the wakeup_tick of thread a is less than that of thread b
   // indicating that thread a should be placed before thread b in the list.
   // It has to take void *aux as a parameter to match the signature of list_less_func, but we don't use it in this comparison.
-  const struct thread *thread_a = list_entry(a, struct thread, elem);
-  const struct thread *thread_b = list_entry(b, struct thread, elem);
-  return thread_a->wakeup_tick < thread_b->wakeup_tick;
+  const struct thread *thread_a = list_entry(a, struct thread, elem); // Get the thread structure from the list element a
+  const struct thread *thread_b = list_entry(b, struct thread, elem); // Get the thread structure from the list element b
+  return thread_a->wakeup_tick < thread_b->wakeup_tick;               // Compare the wakeup_tick of the two threads and return true if thread_a's wakeup_tick is less than thread_b's wakeup_tick
 }
 
 
@@ -106,12 +106,14 @@ void
 timer_sleep (int64_t ticks) 
 {
   enum intr_level old_level; // ADDED BY US: Store the previous interrupt level to restore it later.
+                             // this is important because we want to ensure that the thread is not interrupted while it is being added to the sleep list and blocked.
 
   if (ticks <= 0) {
-    return; // No need to sleep for non-positive ticks
+    return;                  // No need to sleep for non-positive ticks, as a non positive value indicates that the thread should not sleep at all.
   }
 
-  ASSERT (intr_get_level() == INTR_ON);                                               // Ensure that interrupts are enabled before proceeding.
+  ASSERT (intr_get_level() == INTR_ON);                                               // Check so that interrupts are enabled when this function is called. If they are not this will create an error.
+                                                                                      // This is important because we want to ensure that the thread is not interrupted while it is being added to the sleep list and blocked.
 
   old_level = intr_disable();                                                         // Disable interrupts to prevent race conditions while modifying the sleep list.
 

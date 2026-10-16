@@ -82,6 +82,8 @@ void init_bus (void) {
 
   /* TODO: Initialize global/static variables,
      e.g. your condition variables, locks, counters etc */
+
+  
 }
 
 void batch_scheduler (unsigned int num_priority_send,
@@ -188,6 +190,15 @@ void get_slot (const task_t *task) {
    * feel free to schedule priority tasks of the same direction,
    * even if there are priority tasks of the other direction waiting
    */
+
+  while (true) {
+  // Get the current number of tasks using the bus
+  
+
+   // What direction
+
+   // Check if I have priority over other tasks
+  }
 }
 
 void transfer_data (const task_t *task) {

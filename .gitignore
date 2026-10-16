@@ -3,3 +3,4 @@
 build/
 lab_1/tests/reports/
 lab_1/tests/venv/
+*.Identifier

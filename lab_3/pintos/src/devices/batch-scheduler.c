@@ -76,14 +76,28 @@ static void transfer_data (const task_t *task);
 /* Releases the slot */
 static void release_slot (const task_t *task);
 
+static unsigned int threads_on_bus;
+static direction_t bus_current_direction = SEND;
+static struct lock bus_count_lock;
+static struct lock bus_direction_lock;
+static struct semaphore prio_flag;
+
 void init_bus (void) {
 
   random_init ((unsigned int)123456789);
 
   /* TODO: Initialize global/static variables,
      e.g. your condition variables, locks, counters etc */
+ 
+  // One lock for the bus count
+  lock_init (&bus_count_lock);
 
-  
+  // One lock for the bus direction
+  lock_init (&bus_direction_lock);
+
+  // One semmaphor for keeping track of prio. threads
+  sema_init(&prio_flag, 0);
+
 }
 
 void batch_scheduler (unsigned int num_priority_send,
@@ -191,13 +205,51 @@ void get_slot (const task_t *task) {
    * even if there are priority tasks of the other direction waiting
    */
 
-  while (true) {
-  // Get the current number of tasks using the bus
   
+  if(task->priority == PRIORITY) {
+    sema_up(&prio_flag);
+  }
 
-   // What direction
+  while (true) {
+  // Get the current number of tasks using the bus and compare to the max allowed
+
+  if (threads_on_bus < 3 && task->priority == PRIORITY) {
+    // High prio. thread, same direction as current / no threads on bus
+      if (task->direction == bus_current_direction || threads_on_bus == 0) {
+        lock_acquire(&bus_count_lock);
+        threads_on_bus++;
+        lock_release(&bus_count_lock);
+
+        lock_acquire(&bus_direction_lock);
+        bus_current_direction = task->direction;
+        lock_release(&bus_direction_lock);
+        
+        sema_down(&prio_flag);
+        return;
+
+      }
+  } else if (threads_on_bus < 3) {
+    // Normal prio. thread, same direction as current / no threads on bus
+    if ((task->direction == bus_current_direction || threads_on_bus == 0) && prio_flag.value == 0) {
+        lock_acquire(&bus_count_lock);
+        threads_on_bus++;
+        lock_release(&bus_count_lock);
+
+        lock_acquire(&bus_direction_lock);
+        bus_current_direction = task->direction;
+        lock_release(&bus_direction_lock);
+        return;
+    }
+  }
+
+
+   // My direction
+
+   // Bus direction if not empty
 
    // Check if I have priority over other tasks
+
+   // Get on the bus
   }
 }
 
@@ -212,4 +264,8 @@ void release_slot (const task_t *task) {
    *       - Do you need to notify any waiting task?
    *       - Do you need to increment/decrement any counter?
    */
+
+  lock_acquire(&bus_count_lock);
+  threads_on_bus--;
+  lock_release(&bus_count_lock);
 }

@@ -76,7 +76,6 @@ static void transfer_data (const task_t *task);
 /* Releases the slot */
 static void release_slot (const task_t *task);
 
-static unsigned int threads_on_bus;
 static direction_t bus_current_direction = SEND;
 static struct lock bus_count_lock;
 static struct lock bus_direction_lock;
@@ -218,11 +217,6 @@ void get_slot (const task_t *task) {
   
     // Wait for the codition that a slot on the bus is available
     sema_down(&bus_slot_available);
-  
-    // DEBUG:
-    if (&bus_slot_available.value > MAX_NUM_OF_TASKS) {
-      PANIC ("Bus slot semaphore exceeded capacity");
-    }
 
     if (task->priority == PRIORITY) {
       // High prio. thread, same direction as current / no threads on bus
@@ -235,7 +229,7 @@ void get_slot (const task_t *task) {
 
     } else {
       // Normal prio. thread, same direction as current / no threads on bus
-      if ((task->direction == bus_current_direction || sema_try_up(&bus_slot_available)) && sema_try_down(&prio_flag) == false) {
+      if ((task->direction == bus_current_direction || sema_try_down(&bus_slot_available) == true) && sema_try_down(&prio_flag) == false) {
           lock_acquire(&bus_direction_lock);
           bus_current_direction = task->direction;
           lock_release(&bus_direction_lock);

@@ -81,6 +81,7 @@ static direction_t bus_current_direction = SEND;
 static struct lock bus_count_lock;
 static struct lock bus_direction_lock;
 static struct semaphore prio_flag;
+static struct semaphore bus_slot_available;
 
 void init_bus (void) {
 
@@ -94,6 +95,9 @@ void init_bus (void) {
 
   // One lock for the bus direction
   lock_init (&bus_direction_lock);
+
+  // One semaphore for keeping track of available bus slots
+  sema_init(&bus_slot_available, BUS_CAPACITY);
 
   // One semmaphor for keeping track of prio. threads
   sema_init(&prio_flag, 0);
@@ -211,35 +215,27 @@ void get_slot (const task_t *task) {
   }
 
   while (true) {
-  // Get the current number of tasks using the bus and compare to the max allowed
+  
+    // Wait for the codition that a slot on the bus is available
+    sema_down(&bus_slot_available);
+  
+    if (task->priority == PRIORITY) {
+      // High prio. thread, same direction as current / no threads on bus
+      lock_acquire(&bus_direction_lock);
+      bus_current_direction = task->direction;
+      lock_release(&bus_direction_lock);
+      
+      sema_down(&prio_flag);
+      return;
 
-  if (threads_on_bus < 3 && task->priority == PRIORITY) {
-    // High prio. thread, same direction as current / no threads on bus
-      if (task->direction == bus_current_direction || threads_on_bus == 0) {
-        lock_acquire(&bus_count_lock);
-        threads_on_bus++;
-        lock_release(&bus_count_lock);
-
-        lock_acquire(&bus_direction_lock);
-        bus_current_direction = task->direction;
-        lock_release(&bus_direction_lock);
-        
-        sema_down(&prio_flag);
-        return;
-
+    } else {
+      // Normal prio. thread, same direction as current / no threads on bus
+      if ((task->direction == bus_current_direction || threads_on_bus == 0) && sema_try_down(&prio_flag) == false) {
+          lock_acquire(&bus_direction_lock);
+          bus_current_direction = task->direction;
+          lock_release(&bus_direction_lock);
+          return;
       }
-  } else if (threads_on_bus < 3) {
-    // Normal prio. thread, same direction as current / no threads on bus
-    if ((task->direction == bus_current_direction || threads_on_bus == 0) && prio_flag.value == 0) {
-        lock_acquire(&bus_count_lock);
-        threads_on_bus++;
-        lock_release(&bus_count_lock);
-
-        lock_acquire(&bus_direction_lock);
-        bus_current_direction = task->direction;
-        lock_release(&bus_direction_lock);
-        return;
-    }
   }
 
 
@@ -265,7 +261,5 @@ void release_slot (const task_t *task) {
    *       - Do you need to increment/decrement any counter?
    */
 
-  lock_acquire(&bus_count_lock);
-  threads_on_bus--;
-  lock_release(&bus_count_lock);
+  sema_up(&bus_slot_available);
 }

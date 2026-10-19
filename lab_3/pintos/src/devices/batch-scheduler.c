@@ -241,16 +241,11 @@ void get_slot (const task_t *task) {
           lock_release(&bus_direction_lock);
           return;
       }
-  }
-
-
-   // My direction
-
-   // Bus direction if not empty
-
-   // Check if I have priority over other tasks
-
-   // Get on the bus
+      else {
+        // Normal prio. thread, other direction than current / threads on bus
+        sema_up(&bus_slot_available);
+      }
+    }
   }
 }
 

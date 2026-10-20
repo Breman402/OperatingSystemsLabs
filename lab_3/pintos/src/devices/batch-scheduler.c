@@ -77,30 +77,17 @@ static void transfer_data (const task_t *task);
 static void release_slot (const task_t *task);
 
 static direction_t bus_current_direction = SEND;
-static struct lock bus_count_lock;
-static struct lock bus_direction_lock;
-static struct semaphore prio_flag;
-static struct semaphore bus_slot_available;
+static unsigned int bus_tasks;
+static unsigned int priority_waiters;
+static struct lock bus_lock;
+static struct condition bus_changed;
 
 void init_bus (void) {
 
   random_init ((unsigned int)123456789);
 
-  /* TODO: Initialize global/static variables,
-     e.g. your condition variables, locks, counters etc */
- 
-  // One lock for the bus count
-  lock_init (&bus_count_lock);
-
-  // One lock for the bus direction
-  lock_init (&bus_direction_lock);
-
-  // One semaphore for keeping track of available bus slots
-  sema_init(&bus_slot_available, BUS_CAPACITY);
-
-  // One semmaphor for keeping track of prio. threads
-  sema_init(&prio_flag, 0);
-
+  lock_init (&bus_lock);    // Lock to make sure that only one thread can access the bus at a time
+  cond_init (&bus_changed); // Condition variable to signal when the bus state has changed
 }
 
 void batch_scheduler (unsigned int num_priority_send,
@@ -208,39 +195,32 @@ void get_slot (const task_t *task) {
    * even if there are priority tasks of the other direction waiting
    */
 
-  
-  if(task->priority == PRIORITY) {
-    sema_up(&prio_flag);
+  lock_acquire (&bus_lock); // Anything beyond this will be safe from race conditions
+
+  if (task->priority == PRIORITY) {
+    priority_waiters++;
   }
 
-  while (true) {
-  
-    // Wait for the codition that a slot on the bus is available
-    sema_down(&bus_slot_available);
+  // This while loop sends the thread to sleep if none of the conditions for acquiring a slot are met.
+  while (bus_tasks == BUS_CAPACITY || (bus_tasks > 0 && task->direction != bus_current_direction) || (task->priority == NORMAL && priority_waiters > 0)) {
+    cond_wait (&bus_changed, &bus_lock); // wait until a slot is available, the bus direction matches, and there are no priority waiters for normal tasks
+  }
 
-    if (task->priority == PRIORITY) {
-      // High prio. thread, same direction as current / no threads on bus
-      lock_acquire(&bus_direction_lock);
-      bus_current_direction = task->direction;
-      lock_release(&bus_direction_lock);
-      
-      sema_down(&prio_flag);
-      return;
+  // If the bus is empty, set the current direction to the task's direction
+  if (bus_tasks == 0) {
+    bus_current_direction = task->direction;
+  }
 
-    } else {
-      // Normal prio. thread, same direction as current / no threads on bus
-      if ((task->direction == bus_current_direction || sema_try_down(&bus_slot_available) == true) && sema_try_down(&prio_flag) == false) {
-          lock_acquire(&bus_direction_lock);
-          bus_current_direction = task->direction;
-          lock_release(&bus_direction_lock);
-          return;
-      }
-      else {
-        // Normal prio. thread, other direction than current / threads on bus
-        sema_up(&bus_slot_available);
-      }
+  bus_tasks++;
+
+  if (task->priority == PRIORITY) {
+    priority_waiters--;
+    if (priority_waiters == 0) {
+      cond_broadcast (&bus_changed, &bus_lock); // Broadcast to all waiting threads that there are no more priority waiters, so normal tasks can now compete for the bus
     }
   }
+
+  lock_release (&bus_lock);
 }
 
 void transfer_data (const task_t *task) {
@@ -250,10 +230,8 @@ void transfer_data (const task_t *task) {
 
 void release_slot (const task_t *task) {
 
-  /* TODO: Release the slot, think about the actions you need to perform:
-   *       - Do you need to notify any waiting task?
-   *       - Do you need to increment/decrement any counter?
-   */
-
-  sema_up(&bus_slot_available);
+  lock_acquire (&bus_lock);
+  bus_tasks--;
+  cond_broadcast (&bus_changed, &bus_lock);
+  lock_release (&bus_lock);
 }
